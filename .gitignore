@@ -1,0 +1,10 @@
+# SwiftPM and xtool build products
+.build/
+.swiftpm/
+.bsp/
+xtool/
+
+# Xcode user-specific settings
+xcuserdata/
+*.xcuserstate
+.DS_Store
