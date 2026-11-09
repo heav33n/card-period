@@ -22,4 +22,28 @@ final class PeriodTests: XCTestCase {
         XCTAssertEqual(c.remaining(at: date(2025, 3, 4), calendar: calendar), 7500)
         XCTAssertEqual(calendar.component(.day, from: c.period(containing: date(2025, 3, 4), calendar: calendar).end), 10)
     }
+    func testRolloverAccumulatesUnusedAllowanceAndIncludesPastPurchases() {
+        var c = card(.monthly, 1)
+        c.rolloverStart = date(2025, 1, 15)
+        c.purchases = [Purchase(title: "January", amountCents: 9900, date: date(2025, 1, 2)), Purchase(title: "February", amountCents: 5000, date: date(2025, 2, 2))]
+        XCTAssertEqual(c.carriedOver(at: date(2025, 2, 5), calendar: calendar), 100)
+        XCTAssertEqual(c.allowance(at: date(2025, 2, 5), calendar: calendar), 10100)
+        XCTAssertEqual(c.remaining(at: date(2025, 3, 5), calendar: calendar), 15100)
+        XCTAssertEqual(c.carriedOver(at: date(2025, 1, 20), calendar: calendar), 0)
+    }
+    func testOverspendingDoesNotCarryAsDebt() {
+        var c = card(.weekly, 2)
+        c.rolloverStart = date(2025, 3, 3)
+        c.purchases = [Purchase(title: "Overspend", amountCents: 12000, date: date(2025, 3, 4))]
+        XCTAssertEqual(c.remaining(at: date(2025, 3, 5), calendar: calendar), -2000)
+        XCTAssertEqual(c.remaining(at: date(2025, 3, 10), calendar: calendar), 10000)
+    }
+    func testOldSavedCardsHaveRolloverDisabled() throws {
+        let json = """
+        {"name":"Card","lastFour":"1234","limitCents":10000,"currencyCode":"USD","schedule":"monthly","resetDay":1,"purchases":[],"id":"00000000-0000-0000-0000-000000000001"}
+        """
+        let c = try JSONDecoder().decode(SpendingCard.self, from: Data(json.utf8))
+        XCTAssertNil(c.rolloverStart)
+        XCTAssertEqual(c.carriedOver(at: date(2025, 3, 1), calendar: calendar), 0)
+    }
 }

@@ -1,6 +1,6 @@
 # Card Period
 
-A native iOS app for tracking a personal spending allowance per card. Add a nickname, last four digits, limit, currency and weekly or monthly reset day. Purchases are entered manually and count in the period containing their date; history remains available after a reset. Monthly dates beyond the end of a month reset on that month's last day. Cards and purchases are stored locally on the device. Choose an accent color, and optionally show an approximate balance in another currency.
+A native iOS app for tracking a personal spending allowance per card. Add a nickname, last four digits, limit, currency and weekly or monthly reset day. Purchases are entered manually and count in the period containing their date; history remains available after a reset. Optionally, unused allowance rolls forward and accumulates; overspending does not carry as debt. Rollover begins in the period when enabled, and changing the limit, currency, or reset schedule restarts it. Monthly dates beyond the end of a month reset on that month's last day. Cards and purchases are stored locally on the device. Choose an accent color, and optionally show an approximate balance in another currency.
 
 ## Build and run on Linux with xtool
 

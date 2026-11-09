@@ -23,6 +23,8 @@ struct SpendingCard: Codable, Identifiable, Equatable {
     // Calendar weekday (1 = Sunday), or day of month (1...31).
     var resetDay: Int
     var purchases: [Purchase] = []
+    // A nil date means rollover is disabled; older saved cards decode with nil.
+    var rolloverStart: Date? = nil
 
     func period(containing date: Date = Date(), calendar: Calendar = .current) -> (start: Date, end: Date) {
         let today = calendar.startOfDay(for: date)
@@ -48,7 +50,25 @@ struct SpendingCard: Codable, Identifiable, Equatable {
         let bounds = period(containing: date, calendar: calendar)
         return purchases.filter { $0.date >= bounds.start && $0.date < bounds.end && $0.date <= date }.reduce(0) { $0 + $1.amountCents }
     }
-    func remaining(at date: Date = Date(), calendar: Calendar = .current) -> Int { limitCents - spent(at: date, calendar: calendar) }
+    func carriedOver(at date: Date = Date(), calendar: Calendar = .current) -> Int {
+        guard let rolloverStart else { return 0 }
+        let current = period(containing: date, calendar: calendar)
+        var bounds = period(containing: rolloverStart, calendar: calendar)
+        guard bounds.start < current.start else { return 0 }
+        var carry = 0
+        while bounds.start < current.start {
+            let periodSpent = purchases.lazy.filter { $0.date >= bounds.start && $0.date < bounds.end }.reduce(0) { $0 + $1.amountCents }
+            carry = max(0, limitCents + carry - periodSpent)
+            bounds = period(containing: bounds.end, calendar: calendar)
+        }
+        return carry
+    }
+    func allowance(at date: Date = Date(), calendar: Calendar = .current) -> Int {
+        limitCents + carriedOver(at: date, calendar: calendar)
+    }
+    func remaining(at date: Date = Date(), calendar: Calendar = .current) -> Int {
+        allowance(at: date, calendar: calendar) - spent(at: date, calendar: calendar)
+    }
 }
 
 func money(_ cents: Int, currency: String) -> String {

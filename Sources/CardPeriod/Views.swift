@@ -97,7 +97,7 @@ struct CardTile: View {
     let card: SpendingCard
     var showsNavigationArrow = true
     var body: some View {
-        let spent = card.spent(); let remaining = card.remaining()
+        let spent = card.spent(); let carry = card.carriedOver(); let allowance = card.limitCents + carry; let remaining = allowance - spent
         VStack(alignment: .leading, spacing: 20) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 5) { Text(card.name).font(.headline); Text("••••  \(card.lastFour)").font(.subheadline).foregroundColor(theme.foreground) }
@@ -121,8 +121,9 @@ struct CardTile: View {
                     }
                 }
             }
-            GeometryReader { geo in ZStack(alignment: .leading) { Capsule().fill(theme.foreground.opacity(0.25)); Capsule().fill(theme.highlight).frame(width: geo.size.width * min(1, max(0, CGFloat(spent) / CGFloat(max(card.limitCents, 1))))) } }.frame(height: 6)
-            HStack { Text("\(money(spent, currency: card.currencyCode)) spent"); Spacer(); Text("of \(money(card.limitCents, currency: card.currencyCode))") }.font(.caption).foregroundColor(theme.foreground)
+            GeometryReader { geo in ZStack(alignment: .leading) { Capsule().fill(theme.foreground.opacity(0.25)); Capsule().fill(theme.highlight).frame(width: geo.size.width * min(1, max(0, CGFloat(spent) / CGFloat(max(allowance, 1))))) } }.frame(height: 6)
+            HStack { Text("\(money(spent, currency: card.currencyCode)) spent"); Spacer(); Text("of \(money(allowance, currency: card.currencyCode))") }.font(.caption).foregroundColor(theme.foreground)
+            if carry > 0 { Text("Includes \(money(carry, currency: card.currencyCode)) rolled over").font(.caption).foregroundColor(theme.foreground) }
             HStack { Image(systemName: "arrow.clockwise"); Text("Resets \(card.period().end.formatted(date: .abbreviated, time: .omitted))"); Spacer(); Text(card.schedule.label) }.font(.caption.weight(.medium)).foregroundColor(theme.foreground)
         }.padding(22).foregroundColor(theme.foreground).background(theme.color, in: RoundedRectangle(cornerRadius: 24))
             .task(id: "\(showConversion)-\(card.currencyCode)-\(conversionCurrency)") {
@@ -236,6 +237,7 @@ struct CardForm: View {
     @State private var schedule: ResetSchedule = .monthly
     @State private var weekday = 2
     @State private var monthDay = 1
+    @State private var rollover = false
     @State private var attempted = false
     private var valid: Bool { !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && lastFour.count == 4 && lastFour.allSatisfy { $0.isASCII && $0.isNumber } && cents(from: limit) != nil && currency.count == 3 && currency.allSatisfy { $0.isASCII && $0.isLetter } }
     var body: some View {
@@ -251,10 +253,13 @@ struct CardForm: View {
                         Picker("Resets on", selection: $monthDay) { ForEach(1...31, id: \.self) { day in Text("Day \(day)").tag(day) } }
                     }
                 } header: { Text("Reset schedule") } footer: { Text(schedule == .monthly ? "For shorter months, the limit resets on the last day of the month." : "Your allowance resets at the start of the selected day.") }
+                Section {
+                    Toggle("Roll over unused balance", isOn: $rollover)
+                } header: { Text("Rollover") } footer: { Text("Unused allowance carries forward and can accumulate. Overspending does not carry as debt. Changing the limit, currency, or reset schedule restarts rollover in the current period.") }
                 if attempted && !valid { Text("Enter a name, four digits, a valid limit, and a three-letter currency code.").foregroundColor(.red).font(.footnote) }
             }.navigationTitle(existing == nil ? "Add card" : "Edit card").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("Save") { attempted = true; guard valid, let amount = cents(from: limit) else { return }; var card = existing ?? SpendingCard(name: "", lastFour: "", limitCents: 0, currencyCode: currency, schedule: schedule, resetDay: 1); card.name = name.trimmingCharacters(in: .whitespacesAndNewlines); card.lastFour = lastFour; card.limitCents = amount; card.currencyCode = currency; card.schedule = schedule; card.resetDay = schedule == .weekly ? weekday : monthDay; store.put(card); dismiss() } } }
-                .onAppear { if let card = existing { name = card.name; lastFour = card.lastFour; let formatter = NumberFormatter(); formatter.numberStyle = .decimal; formatter.maximumFractionDigits = 2; limit = formatter.string(from: NSDecimalNumber(decimal: Decimal(card.limitCents) / 100)) ?? ""; currency = card.currencyCode; schedule = card.schedule; if card.schedule == .weekly { weekday = card.resetDay } else { monthDay = card.resetDay } } }
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("Save") { attempted = true; guard valid, let amount = cents(from: limit) else { return }; var card = existing ?? SpendingCard(name: "", lastFour: "", limitCents: 0, currencyCode: currency, schedule: schedule, resetDay: 1); let newResetDay = schedule == .weekly ? weekday : monthDay; let restartsRollover = card.rolloverStart == nil || card.limitCents != amount || card.currencyCode != currency || card.schedule != schedule || card.resetDay != newResetDay; card.name = name.trimmingCharacters(in: .whitespacesAndNewlines); card.lastFour = lastFour; card.limitCents = amount; card.currencyCode = currency; card.schedule = schedule; card.resetDay = newResetDay; if rollover { if restartsRollover { card.rolloverStart = Date() } } else { card.rolloverStart = nil }; store.put(card); dismiss() } } }
+                .onAppear { if let card = existing { name = card.name; lastFour = card.lastFour; let formatter = NumberFormatter(); formatter.numberStyle = .decimal; formatter.maximumFractionDigits = 2; limit = formatter.string(from: NSDecimalNumber(decimal: Decimal(card.limitCents) / 100)) ?? ""; currency = card.currencyCode; schedule = card.schedule; rollover = card.rolloverStart != nil; if card.schedule == .weekly { weekday = card.resetDay } else { monthDay = card.resetDay } } }
         }
     }
 }
